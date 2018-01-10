@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?> 
+<job maxFilesPerProcess="20" simulateSubmission="false">
+<command>
+	starver SL17d
+        ls -l -a
+        root4star -l -b -q -x readPicoDst.C\(\"$FILELIST\",\"dMesonsxrootd_$JOBID.root\"\) &gt;&amp; ${JOBID}.log
+        pwd
+        ls -l -a
+</command>
+	
+	<stdout URL="file:./log/dMesonsxrootd_$JOBID.log"/>
+	<stderr URL="file:./err/dMesonsxrootd_$JOBID.err"/>
+
+	<Generator>
+		<Location>./report/</Location>
+		<ScriptLocation>./csh/</ScriptLocation>
+		<ListLocation>./list/</ListLocation>
+	</Generator>
+
+<input URL="filelist:/star/u/amcw7777/dAu2016/200.list"/>
+<!-- <input URL="filelist:/star/u/amcw7777/dAu2016/test.list"/> -->
+
+	<SandBox installer="ZIP">
+		<Package name="LocalLibraries">
+                  <File>file:/star/u/amcw7777/dAu2016/readPicoDst.C</File>
+                  <File>file:/star/u/amcw7777/dAu2016/200.list</File>
+               		<File>file:/star/u/amcw7777/dAu2016/.sl64_gcc482/</File>
+               		<File>file:/star/u/amcw7777/dAu2016/StRoot/</File>
+               		<File>file:/star/u/amcw7777/dAu2016/run14AuAu200GeVPrescales/</File>
+		</Package>
+	</SandBox>
+    <output fromScratch="*.root" toURL="file:/star/u/amcw7777/pwg/dAuD0Tree/QA/root-files/" />
+    <output fromScratch="*.log" toURL="file:/star/u/amcw7777/pwg/dAuD0Tree/QA/log/" />
+    <!-- <output fromScratch="*.log" toURL="file:/star/u/amcw7777/pwg/dAuD0Tree/QA/" /> -->
+</job>
