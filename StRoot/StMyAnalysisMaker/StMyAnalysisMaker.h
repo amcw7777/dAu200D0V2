@@ -94,8 +94,11 @@ class StMyAnalysisMaker : public StMaker {
 
     StRefMultCorr* mGRefMultCorrUtil; 
 
+    TH1D *eventCheck;
+    TH1D *trackCheckTof;
+    TH1D *trackCheckNoTof;
     TH2D *hPVZ;
-    TH1D *deltaVZ;
+    TH2D *deltaVZ;
 
     TH1D *hEta;
     TH1D *hMult;

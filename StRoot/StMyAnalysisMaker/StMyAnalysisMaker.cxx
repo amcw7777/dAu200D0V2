@@ -58,7 +58,12 @@ Int_t StMyAnalysisMaker::Finish() {
   if(mOutName!="") {
     TFile *fout = new TFile(mOutName.Data(),"RECREATE");
     fout->cd();
-    WriteHistograms();
+    // WriteHistograms();
+    tuplePair->Write();
+    eventCheck->Write();
+    trackCheckTof->Write();
+    trackCheckNoTof->Write();
+    deltaVZ->Write();
     fout->Write();
     fout->Close();
   }
@@ -72,9 +77,16 @@ Int_t StMyAnalysisMaker::Finish() {
 void StMyAnalysisMaker::DeclareHistograms() {
   mD0Tuple = new TNtuple("mD0Tuple","","mass:pt:centrality");
 
-   hPVZ = new TH2D("pvz",";tpc vz;vpd vz",500,-100,100,500,-100,100);
+  eventCheck = new TH1D("eventCheck","",10,-0.5,9.5);
+  trackCheckTof = new TH1D("trackCheckTof","",10,-0.5,9.5);
+  trackCheckNoTof = new TH1D("trackCheckNoTof","",10,-0.5,9.5);
+   hPVZ = new TH2D("pvz",";tpc vz;vpd vz",200,-100,100,200,-100,100);
    hMult = new TH1D("hMult","",100,0,100);
-   deltaVZ = new TH1D("deltaVZ","",500,-10,10);
+  float multBin[6] = {0,7,12,16,22,100};
+  float dzBin[2001];
+  for(int i =0; i< 2001; i++)
+    dzBin[i] = i*0.01-10.;
+   deltaVZ = new TH2D("deltaVZ","",5,multBin,2000,dzBin);
 
    double hftPtBins[20] = {0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.6,0.7,0.8,0.9,1.,1.2,1.42,4,6,8,10};
    hEta = new TH1D("eta","",200,-1.5,1.5);
@@ -108,7 +120,7 @@ void StMyAnalysisMaker::DeclareHistograms() {
    trackTest1 = new TH1D("trackTest1","",10,0,10);
    trackTest2 = new TH1D("trackTest2","",10,0,10);
 
-   tuplePair = new TNtuple("tuplePair","","mass:pt:kDca:pDca:kpDca:theta:decayLenght:charge:dpt");
+   tuplePair = new TNtuple("tuplePair","","mass:pt:kaonDca:pionDca:dcaDaughters:pointingAngle:decayLenght:charge:kaonPt:pionPt");
    // -------------- USER VARIABLES -------------------------
    
 
@@ -222,6 +234,7 @@ void StMyAnalysisMaker::DeclareHistograms() {
 //-----------------------------------------------------------------------------
 void StMyAnalysisMaker::WriteHistograms() {
   mD0Tuple->Write();
+   eventCheck->Write();
   hMult->Write();
    hD0MassLike->Write();
    hD0MassUnlike->Write();
@@ -249,7 +262,7 @@ void StMyAnalysisMaker::WriteHistograms() {
    hTPCDcaXY->Write();
    hHFTDcaXY->Write();
 
-   // tuplePair->Write();
+   tuplePair->Write();
    trackTest1->Write();
    trackTest2->Write();
    hVzVpdVz->Write();
@@ -317,8 +330,14 @@ Int_t StMyAnalysisMaker::Make() {
   }
 //////////////////////////////////
   StPicoEvent *event = (StPicoEvent *)mPicoDst->event();
+   StThreeVectorF vtx = event->primaryVertex();
+   float b = event->bField();
+   double vpdvz = mPicoDst->event()->vzVpd();
+   double vz = vtx.z();
+   deltaVZ->Fill(event->grefMult(),vz-vpdvz);
   // cout<<"ref mult = "<<event->grefMult()<<endl;
   hMult->Fill(event->grefMult());
+  eventCheck->Fill(0);
   // if(!(isGoodEvent()))
   // { 
   //   LOG_WARN << " Not Min Bias! Skip! " << endm;
@@ -347,10 +366,6 @@ Int_t StMyAnalysisMaker::Make() {
   {
     if(event->isTrigger(trg)) isGoodTrigger = true;
   }
-   StThreeVectorF vtx = event->primaryVertex();
-   float b = event->bField();
-   double vpdvz = mPicoDst->event()->vzVpd();
-   double vz = vtx.z();
   // if(vz==0)
   //    exit(1);
 
@@ -363,13 +378,13 @@ Int_t StMyAnalysisMaker::Make() {
    //
    hPVZ->Fill(vz,vpdvz);
    hVzVpdVz->Fill(vz,vpdvz);
-   deltaVZ->Fill(vz-vpdvz);
 
-   if( fabs(vz)>10 && fabs(vz-vpdvz)>3 ) 
-     return kStWarn;
+   // if( fabs(vz)>10 && fabs(vz-vpdvz)>3 ) 
+   //   return kStWarn;
 
-   getHadronCorV2(0);
+   // getHadronCorV2(0);
    
+  eventCheck->Fill(1);
    // cout<<"number of tracks = "<<picoDst->numberOfTracks()<<endl;
    for(int i=0;i<mPicoDst->numberOfTracks();i++)
    {
@@ -387,30 +402,65 @@ Int_t StMyAnalysisMaker::Make() {
      StPicoBTofPidTraits* tofPidTraits;
      if (tofIndex >= 0)  tofPidTraits = mPicoDst->btofPidTraits(tofIndex); //GNX
      if (tofIndex >= 0 && tofPidTraits && tofPidTraits->btofMatchFlag() > 0)  TofMatch = kTRUE;
-
-     if(!TofMatch) continue; // Tof match for pile-up
-     if(dca>1.5)  continue; // dca
-     if(pt<0.1)  continue; // global pT cut
-     if(fabs(eta)>1) continue; // should be about 0.5
-
-     hEta->Fill(eta);
-     hPhi->Fill(phi);
-     hPt->Fill(pt);
-     hDcaXY->Fill(pt,dcaXY);
-     hDcaZ->Fill(pt,dcaZ);
-     if(trk->nHitsFit()<20) continue;
-     hTPCEta->Fill(eta);
-     hTPCPhi->Fill(phi);
-     hTPCPt->Fill(pt);
-     hTPCDcaXY->Fill(pt,dcaXY);
-     hTPCDcaZ->Fill(pt,dcaZ);
      if(!(trk->isHFTTrack())) continue;
-     hHFTEta->Fill(eta);
-     hHFTPhi->Fill(phi);
-     hHFTPt->Fill(pt);
-     hHFTDcaXY->Fill(pt,dcaXY);
-     hHFTDcaZ->Fill(pt,dcaZ);
+     trackCheckTof->Fill(0);
+     if(!TofMatch) continue; // Tof match for pile-up
+     trackCheckTof->Fill(1);
+     if(trk->nHitsFit() <= 20) continue;
+     trackCheckTof->Fill(2);
+     if(pt<0.6)  continue; // global pT cut
+     trackCheckTof->Fill(3);
+     if(dca>1.5)  continue; // dca
+     trackCheckTof->Fill(4);
+     if (isTpcPion(trk)) 
+      trackCheckTof->Fill(5);
+
+     bool tpcKaon = isTpcKaon(trk,&vtx);
+     float kBeta = getTofBeta(trk,&vtx);
+     bool tofAvailable = kBeta>0;
+     bool tofKaon = tofAvailable && isTofKaon(trk,kBeta);
+     bool goodKaon = (tofAvailable && tofKaon) || (!tofAvailable && tpcKaon);
+     if(goodKaon)
+       trackCheckTof->Fill(6);
    }
+   for(int i=0;i<mPicoDst->numberOfTracks();i++)
+   {
+     StPicoTrack const* trk = mPicoDst->track(i);
+     double eta = trk->gMom(vtx, b).pseudoRapidity();
+     double phi = trk->gMom(vtx, b).phi() ;
+     double pt = trk->gPt();
+     StPhysicalHelixD helix = trk->helix(b);
+     double dcaZ = (trk->dcaPoint().z() - vtx.z());
+     double dcaXY = helix.geometricSignedDistance(vtx.x(),vtx.y());
+     double dca = (vtx-trk->dcaPoint()).mag();
+     // TOF 
+     int tofIndex = trk->bTofPidTraitsIndex();
+     bool TofMatch = kFALSE;
+     StPicoBTofPidTraits* tofPidTraits;
+     if (tofIndex >= 0)  tofPidTraits = mPicoDst->btofPidTraits(tofIndex); //GNX
+     if (tofIndex >= 0 && tofPidTraits && tofPidTraits->btofMatchFlag() > 0)  TofMatch = kTRUE;
+     if(!(trk->isHFTTrack())) continue;
+     trackCheckNoTof->Fill(0);
+     // if(!TofMatch) continue; // Tof match for pile-up
+     // trackCheckNoTof->Fill(1);
+     if(trk->nHitsFit() <= 20) continue;
+     trackCheckNoTof->Fill(2);
+     if(pt<0.6)  continue; // global pT cut
+     trackCheckNoTof->Fill(3);
+     if(dca>1.5)  continue; // dca
+     trackCheckNoTof->Fill(4);
+     if (isTpcPion(trk)) 
+      trackCheckNoTof->Fill(5);
+
+     bool tpcKaon = isTpcKaon(trk,&vtx);
+     float kBeta = getTofBeta(trk,&vtx);
+     bool tofAvailable = kBeta>0;
+     bool tofKaon = tofAvailable && isTofKaon(trk,kBeta);
+     bool goodKaon = (tofAvailable && tofKaon) || (!tofAvailable && tpcKaon);
+     if(goodKaon)
+       trackCheckNoTof->Fill(6);
+   }
+
 
    for(int i=0;i<mPicoDst->numberOfTracks();i++)
    {
@@ -438,6 +488,19 @@ Int_t StMyAnalysisMaker::Make() {
        if(!goodKaon) continue;
        trackTest2->Fill(4);
        int charge = itrk->charge() * jtrk->charge();
+       // Lukas method
+       StThreeVectorF const p1Mom = itrk->gMom();
+       StThreeVectorF const p2Mom = jtrk->gMom();
+
+       StPhysicalHelixD const p1StraightLine(p1Mom, itrk->origin(), 0, itrk->charge());
+       StPhysicalHelixD const p2StraightLine(p2Mom, jtrk->origin(), 0, jtrk->charge());
+
+       // pair<double, double> const ss = (useStraightLine) ? p1StraightLine.pathLengths(p2StraightLine) : p1Helix.pathLengths(p2Helix);
+       pair<double, double> const ss = p1StraightLine.pathLengths(p2StraightLine);
+       StThreeVectorF const p1AtDcaToP2 = p1StraightLine.at(ss.first);
+       StThreeVectorF const p2AtDcaToP1 = p2StraightLine.at(ss.second);
+       double mDcaDaughters = (p1AtDcaToP2 - p2AtDcaToP1).mag();
+       //////
        StKaonPion *kp = new StKaonPion(jtrk,itrk,j,i,vtx,b);
        hDecayLength->Fill(kp->decayLength());
        hKaonDca->Fill(kp->kaonDca());
@@ -445,9 +508,11 @@ Int_t StMyAnalysisMaker::Make() {
        hDcaDaughters->Fill(kp->dcaDaughters());
        // cout<<"find pair"<<endl;
        hPointing->Fill(kp->pointingAngle() * kp->decayLength());
-       tuplePair->Fill(kp->m(),kp->pt(),kp->kaonDca(),kp->pionDca(),kp->dcaDaughters(),kp->pointingAngle(), kp->decayLength(),charge,fabs(itrk->gPt()-jtrk->gPt()));
+
        StPicoTrack const* kaon = mPicoDst->track(kp->kaonIdx());
        StPicoTrack const* pion = mPicoDst->track(kp->pionIdx());
+       if(kp->pt()>1 && kp->pt()<2)
+         tuplePair->Fill(kp->m(),kp->pt(),kp->kaonDca(),kp->pionDca(),kp->dcaDaughters(),kp->pointingAngle(), kp->decayLength(),charge,kaon->gPt(),pion->gPt());
        if(kaon->charge()*pion->charge()>0 && kp->m()>1.813 && kp->m()<1.919)
        {
          // if(randomSample(kp->pt()))
@@ -587,7 +652,8 @@ bool StMyAnalysisMaker::isGoodTrack(StPicoTrack const * const trk) const
   StPicoEvent *event = (StPicoEvent *)mPicoDst->event();
   StThreeVectorF vtx = event->primaryVertex();
   double dca = (vtx-trk->dcaPoint()).mag();
-  return dca<1.5 && TofMatch && trk->gPt() > mycuts::minPt && trk->nHitsFit() >= mycuts::nHitsFit && trk->isHFTTrack();
+  // return dca<1.5 && TofMatch && trk->gPt() > mycuts::minPt && trk->nHitsFit() >= mycuts::nHitsFit && trk->isHFTTrack();
+  return dca<1.5 && TofMatch && trk->gPt() > 0.2 && trk->nHitsFit() >= mycuts::nHitsFit && trk->isHFTTrack();
   //return  trk->nHitsFit() >= mycuts::nHitsFit;
 }
 
